@@ -1,3 +1,4 @@
+import io.appium.java_client.AppiumBy;
 import io.appium.java_client.AppiumDriver;
 import io.appium.java_client.android.AndroidDriver;
 import org.openqa.selenium.By;
@@ -5,6 +6,7 @@ import org.openqa.selenium.WebElement;
 import org.openqa.selenium.remote.DesiredCapabilities;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
+import org.testng.Assert;
 import org.testng.annotations.AfterTest;
 import org.testng.annotations.BeforeTest;
 import org.testng.annotations.Test;
@@ -31,17 +33,19 @@ public class Android_Chrome_Test {
     @Test
     public void  userLogin(){
         driver.get("https://the-internet.herokuapp.com/login");
-        driver.manage().timeouts().implicitlyWait(3, TimeUnit.SECONDS);
-        WebElement username = driver.findElement(By.cssSelector("#username"));
-        username.click();
-        username.sendKeys("tomsmith ");
-        WebElement password = driver.findElement(By.cssSelector("#password"));
+        WebElement username = driver.findElement(AppiumBy.xpath("//android.widget.EditText[@resource-id='username']"));
+        username.sendKeys("tomsmith");
+        WebElement password = driver.findElement(AppiumBy.xpath("//android.widget.EditText[@resource-id='password']"));
         password.sendKeys("SuperSecretPassword!");
-        WebElement BTN_LOGIN = driver.findElement(By.cssSelector("#login > button"));
-        BTN_LOGIN.click();
+        WebElement loginBtn = driver.findElement(AppiumBy.className("android.widget.Button"));
+        loginBtn.click();
+
         WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
-        wait.until(ExpectedConditions.urlContains("secure"));
-        System.out.println(driver.getCurrentUrl());
+        wait.until(ExpectedConditions.presenceOfElementLocated(AppiumBy.id("com.android.chrome:id/positive_button"))).click();
+
+        String secureArea = driver.findElement(AppiumBy.xpath("//android.widget.TextView[@text='Secure Area']")).getText();
+
+        Assert.assertEquals(secureArea, "Secure Area");
     }
 
     @AfterTest
