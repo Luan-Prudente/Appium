@@ -1,4 +1,4 @@
-name: Appium Android Tests
+name: Appium Android
 
 on:
   push:
@@ -43,7 +43,6 @@ jobs:
           Invoke-WebRequest -Uri $lib -OutFile "jaxb_libs\$fileName"
         }
 
-        # Cria o wrapper script para sdkmanager
         $wrapperScript = @'
           @echo off
           setlocal
