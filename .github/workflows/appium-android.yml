@@ -18,11 +18,11 @@ jobs:
         target: [default]
     steps:
     - uses: actions/checkout@v3
-    - name: Set up JDK 17 (Adoptium)
+    - name: Set up JDK 17 (AdoptOpenJDK)
       uses: actions/setup-java@v3
       with:
         java-version: 17
-        distribution: 'adoptium'
+        distribution: 'adoptopenjdk'
     - uses: actions/setup-node@v3
       with:
         node-version: '12'
