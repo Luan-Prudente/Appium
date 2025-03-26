@@ -1,4 +1,4 @@
-name: Appium Android
+name: Appium Android (Windows)
 
 on:
   push:
@@ -11,42 +11,58 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest 
+    runs-on: windows-latest
     strategy:
       matrix:
         api-level: [34]  
-        target: [default]
+        target: [google_apis]
     steps:
     - uses: actions/checkout@v3
+    
     - name: Set up JDK 17
       uses: actions/setup-java@v3
       with:
         java-version: 17
         distribution: 'temurin'
+        
     - uses: actions/setup-node@v3
       with:
-        node-version: '12'
-    - run: |
-        npm install -g appium@1.20.2
-        appium -v
-        nohup appium &>/dev/null &
-    - name: List files (debug)
-      run: ls -la
-    - name: Run Appium Tests
-      uses: reactivecircus/android-emulator-runner@v2.1.0
+        node-version: '18'
+        
+    - name: Install Appium
+      run: |
+        npm install -g appium@2.0
+        npm install -g appium-doctor
+        appium-doctor --android
+        
+    - name: Start Appium server
+      run: |
+        Start-Process -FilePath "appium" -ArgumentList "--relaxed-security","--log-timestamp","--local-timezone" -WindowStyle Hidden
+        
+    - name: Set up Android Emulator
+      run: |
+        choco install -y haxm
+        
+        $avdName = "test_avd"
+        sdkmanager "system-images;android-${{ matrix.api-level }};google_apis;x86_64"
+        avdmanager create avd -n $avdName -k "system-images;android-${{ matrix.api-level }};google_apis;x86_64" -d "pixel_4"
+
+        Start-Process -FilePath "emulator" -ArgumentList "-avd","$avdName","-no-window","-gpu","swiftshader_indirect" -WindowStyle Hidden
+        
+        adb wait-for-device
+        while (-not ((adb shell getprop sys.boot_completed) -eq "1")) {
+          Start-Sleep -Seconds 5
+        }
+        
+    - name: Run Tests
+      run: |
+        mvn clean test -Pandroid -Dappium.server.url=http://127.0.0.1:4723
+        
+    - name: Upload logs
+      if: always()
+      uses: actions/upload-artifact@v3
       with:
-        api-level: ${{ matrix.api-level }}
-        target: ${{ matrix.target }}
-        arch: x86_64
-        profile: Nexus 6
-        script: |
-          # Reset ADB e aguarda o device
-          adb kill-server
-          adb start-server
-          adb wait-for-device
-          
-          until adb shell getprop sys.boot_completed | grep -q "1"; do
-            sleep 5
-          done
-      
-          mvn clean test -Pandroid
+        name: windows-logs
+        path: |
+          **/target/surefire-reports
+          **/*.log
