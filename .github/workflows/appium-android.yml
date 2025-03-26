@@ -1,92 +1,126 @@
-name: Appium Android
+name: Appium Android Tests
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  teste-android:
+  test:
     runs-on: windows-latest
-    
+    env:
+      ANDROID_HOME: C:\Android\sdk
+      PATH: ${{ env.ANDROID_HOME }}\emulator;${{ env.ANDROID_HOME }}\platform-tools;${{ env.ANDROID_HOME }}\cmd;${{ env.PATH }}
+
     steps:
     - uses: actions/checkout@v4
 
-    - name: Configurar JDK 17
+    - name: Set up JDK 17
       uses: actions/setup-java@v3
       with:
         java-version: 17
         distribution: 'temurin'
 
-    - name: Instalar Android SDK
+    - name: Set up Android SDK
       uses: android-actions/setup-android@v3
-      with:
-        android-sdk-root: C:\Android\android-sdk
 
-    - name: Configurar PATH do Android
+    - name: Configure JAXB environment
       run: |
-        echo "C:\Android\android-sdk\emulator" >> $env:GITHUB_PATH
-        echo "C:\Android\android-sdk\platform-tools" >> $env:GITHUB_PATH
-        echo "C:\Android\android-sdk\tools\bin" >> $env:GITHUB_PATH
+        New-Item -ItemType Directory -Path jaxb_libs -Force
 
-    - name: Instalar Node.js
+        $jaxbLibs = @{
+          "jaxb-api-2.3.1.jar" = "https://repo1.maven.org/maven2/javax/xml/bind/jaxb-api/2.3.1/jaxb-api-2.3.1.jar"
+          "jaxb-core-2.3.0.1.jar" = "https://repo1.maven.org/maven2/com/sun/xml/bind/jaxb-core/2.3.0.1/jaxb-core-2.3.0.1.jar"
+          "jaxb-impl-2.3.1.jar" = "https://repo1.maven.org/maven2/com/sun/xml/bind/jaxb-impl/2.3.1/jaxb-impl-2.3.1.jar"
+          "activation-1.1.1.jar" = "https://repo1.maven.org/maven2/javax/activation/activation/1.1.1/activation-1.1.1.jar"
+        }
+        
+        $jaxbLibs.GetEnumerator() | ForEach-Object -Parallel {
+          Invoke-WebRequest -Uri $_.Value -OutFile "jaxb_libs\$($_.Key)"
+        }
+
+        $wrapperScript = @'
+@echo off
+setlocal
+set CLASSPATH=%~dp0jaxb_libs\*;%CLASSPATH%
+set JAVA_OPTS=--add-modules java.xml.bind %JAVA_OPTS%
+call "%ANDROID_HOME%\cmd\sdkmanager" %*
+endlocal
+'@
+        $wrapperScript | Out-File -FilePath sdkmanager.bat -Encoding ASCII
+
+    - name: Accept Android licenses
+      run: |
+        # Create licenses directory if not exists
+        if (!(Test-Path "$env:ANDROID_HOME\licenses")) {
+          New-Item -ItemType Directory -Path "$env:ANDROID_HOME\licenses" -Force
+        }
+        
+        # Add required licenses
+        @"
+8933bad161af4178b1185d1a37fbf41ea5269c55
+d56f5187479451eabf01fb78af6dfcb131a6481e
+"@ | Out-File -FilePath "$env:ANDROID_HOME\licenses\android-sdk-license" -Encoding ASCII
+
+    - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
         node-version: '18'
 
-    - name: Instalar Appium
+    - name: Install Appium
       run: |
         npm install -g appium@2.0
         npm install -g appium-doctor
-        appium-doctor --android
+        appium-doctor --android | Out-File -FilePath appium-doctor.log -Encoding UTF8
+        Get-Content appium-doctor.log
 
-    - name: Iniciar servidor Appium
+    - name: Set up Android emulator
       run: |
-        appium --relaxed-security --log-level debug > appium.log 2>&1 &
-        Start-Sleep -Seconds 15
+        # Install required components
+        .\sdkmanager.bat "platform-tools" "emulator" "platforms;android-34" --verbose
+        .\sdkmanager.bat "system-images;android-34;google_apis;x86_64" --verbose
 
-    - name: Configurar Emulador Android
+        avdmanager create avd -n test -k "system-images;android-34;google_apis;x86_64" -d pixel_4 -f | Out-File -FilePath avdmanager.log -Encoding UTF8
+        Get-Content avdmanager.log
+
+    - name: Start services
       run: |
-        choco install -y haxm --force
-        $licenseFiles = @(
-            "android-sdk-license",
-            "android-googletv-license",
-            "intel-android-extra-license"
-        )
+        $appiumProcess = Start-Process -FilePath "appium" `
+          -ArgumentList "--relaxed-security","--log-level","debug:info" `
+          -WindowStyle Hidden `
+          -PassThru
         
-        foreach ($license in $licenseFiles) {
-            $licensePath = "$env:ANDROID_HOME\licenses\$license"
-            if (-not (Test-Path $licensePath)) {
-                New-Item -Path $licensePath -Force | Out-Null
-                echo "8933bad161af4178b1185d1a37fbf41ea5269c55" | Out-File -FilePath $licensePath -Encoding ASCII
-            }
-        }
+        $emulatorProcess = Start-Process -FilePath "$env:ANDROID_HOME\emulator\emulator" `
+          -ArgumentList "-avd","test","-no-window","-gpu","swiftshader_indirect","-no-snapshot","-noaudio","-no-boot-anim" `
+          -WindowStyle Hidden `
+          -PassThru
         
-        sdkmanager "system-images;android-34;google_apis;x86_64" --verbose
-        avdmanager create avd -n android_avd -k "system-images;android-34;google_apis;x86_64" -d pixel_4 -f
-        $emulatorPath = "$env:ANDROID_HOME\emulator\emulator.exe"
-        Start-Process -FilePath $emulatorPath -ArgumentList "-avd","android_avd","-no-window","-gpu","swiftshader_indirect","-no-snapshot","-noaudio","-no-boot-anim" -WindowStyle Hidden
         adb wait-for-device
+        $timeout = 300 # 5 minutes timeout
+        $startTime = Get-Date
         while (-not ((adb shell getprop sys.boot_completed) -eq "1")) {
+          if (((Get-Date) - $startTime).TotalSeconds -gt $timeout) {
+            Write-Host "Emulator boot timeout"
+            exit 1
+          }
           Start-Sleep -Seconds 5
-          Write-Host "Aguardando inicialização do emulador..."
+          Write-Host "Waiting for emulator to boot..."
         }
-        Write-Host "Emulador pronto!"
+        Write-Host "Emulator ready"
 
-    - name: Executar testes
+    - name: Run Appium tests
       run: |
-        mvn clean test -Pandroid -Dappium.server.url=http://127.0.0.1:4723
+        mvn clean test -Pandroid -Dappium.server.url=http://127.0.0.1:4723 -e -B
 
-    - name: Upload de relatórios
+    - name: Upload test reports
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: relatorios-teste
+        name: test-reports
         path: |
           target/surefire-reports/
           target/screenshots/
-          appium.log
+          appium-doctor.log
+          avdmanager.log
