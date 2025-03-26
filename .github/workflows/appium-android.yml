@@ -1,4 +1,4 @@
-name: Appium Android (Windows)
+name: Appium Android
 
 on:
   push:
@@ -38,31 +38,35 @@ jobs:
     - name: Start Appium server
       run: |
         Start-Process -FilePath "appium" -ArgumentList "--relaxed-security","--log-timestamp","--local-timezone" -WindowStyle Hidden
+        Start-Sleep -Seconds 10
         
     - name: Set up Android Emulator
       run: |
-        choco install -y haxm
-        
-        $avdName = "test_avd"
-        sdkmanager "system-images;android-${{ matrix.api-level }};google_apis;x86_64"
-        avdmanager create avd -n $avdName -k "system-images;android-${{ matrix.api-level }};google_apis;x86_64" -d "pixel_4"
+        choco install -y haxm --force
 
-        Start-Process -FilePath "emulator" -ArgumentList "-avd","$avdName","-no-window","-gpu","swiftshader_indirect" -WindowStyle Hidden
-        
-        adb wait-for-device
-        while (-not ((adb shell getprop sys.boot_completed) -eq "1")) {
+        $avdName = "test_avd"
+        & "$env:ANDROID_HOME\tools\bin\sdkmanager" "system-images;android-$env:API_LEVEL;google_apis;x86_64"
+        & "$env:ANDROID_HOME\tools\bin\avdmanager" create avd -n $avdName -k "system-images;android-$env:API_LEVEL;google_apis;x86_64" -d "pixel_4" -f
+
+        Start-Process -FilePath "$env:ANDROID_HOME\emulator\emulator" -ArgumentList "-avd","$avdName","-no-window","-gpu","swiftshader_indirect" -WindowStyle Hidden
+
+        & "$env:ANDROID_HOME\platform-tools\adb" wait-for-device
+        while (-not ((& "$env:ANDROID_HOME\platform-tools\adb" shell getprop sys.boot_completed) -eq "1")) {
           Start-Sleep -Seconds 5
+          Write-Host "Waiting for device..."
         }
+      env:
+        API_LEVEL: ${{ matrix.api-level }}
         
     - name: Run Tests
       run: |
         mvn clean test -Pandroid -Dappium.server.url=http://127.0.0.1:4723
         
-    - name: Upload logs
+    - name: Upload test reports
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: windows-logs
+        name: test-reports
         path: |
-          **/target/surefire-reports
-          **/*.log
+          target/surefire-reports/
+          target/screenshots/
