@@ -17,5 +17,4 @@ public class TasksListPage extends PageBase{
     public void clickAddTaskBtn(){
         click(addTaskBtn);
     }
-
 }
