@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest 
     strategy:
       matrix:
-        api-level: [25]  
+        api-level: [34]  
         target: [default]
     steps:
     - uses: actions/checkout@v2
@@ -21,9 +21,9 @@ jobs:
       with:
         node-version: '12'
     - run: |
-        npm install -g appium@v1.20.2  # Ou considere uma versão mais recente, se necessário
+        npm install -g appium@v1.20.2
         appium -v
-        nohup appium &>/dev/null &  # Usando nohup para garantir que o Appium continue em segundo plano
+        nohup appium &>/dev/null &
     - name: Run Appium Tests
       uses: reactivecircus/android-emulator-runner@v2
       with:
