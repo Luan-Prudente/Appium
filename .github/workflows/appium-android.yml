@@ -8,7 +8,7 @@ on:
     branches: 
       - main
   workflow_dispatch:
-  
+
 jobs:
   build:
     runs-on: ubuntu-latest 
@@ -18,18 +18,18 @@ jobs:
         target: [default]
     steps:
     - uses: actions/checkout@v2
-    - name: Set up JDK 1.8
+    - name: Set up JDK 17 (Amazon Corretto)
       uses: actions/setup-java@v2
       with:
         java-version: 17
-        distribution: 'corretto'
+        distribution: 'amazon-corretto'
     - uses: actions/setup-node@v2
       with:
         node-version: '12'
     - run: |
         npm install -g appium@v1.20.2
         appium -v
-        nohup appium &>/dev/null &
+        nohup appium &>/dev/null &  # Iniciar Appium em segundo plano
     - name: Run Appium Tests
       uses: reactivecircus/android-emulator-runner@v2
       with:
