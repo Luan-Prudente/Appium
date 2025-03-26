@@ -1,4 +1,4 @@
-name: Appium Android (Windows)
+name: Appium Android
 
 on:
   push:
@@ -10,82 +10,83 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  teste-android:
     runs-on: windows-latest
     
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up JDK 17
+    - name: Configurar JDK 17
       uses: actions/setup-java@v3
       with:
         java-version: 17
         distribution: 'temurin'
 
-    - name: Set up Android SDK
+    - name: Instalar Android SDK
       uses: android-actions/setup-android@v3
       with:
         android-sdk-root: C:\Android\android-sdk
 
-    - name: Add Android tools to PATH
+    - name: Configurar PATH do Android
       run: |
         echo "C:\Android\android-sdk\emulator" >> $env:GITHUB_PATH
-        echo "C:\Android\android-sdk\cmd" >> $env:GITHUB_PATH
         echo "C:\Android\android-sdk\platform-tools" >> $env:GITHUB_PATH
+        echo "C:\Android\android-sdk\tools\bin" >> $env:GITHUB_PATH
 
-    - name: Set up Node.js
+    - name: Instalar Node.js
       uses: actions/setup-node@v3
       with:
         node-version: '18'
 
-    - name: Install Appium
+    - name: Instalar Appium
       run: |
         npm install -g appium@2.0
         npm install -g appium-doctor
         appium-doctor --android
 
-    - name: Start Appium server
+    - name: Iniciar servidor Appium
       run: |
-        Start-Process -FilePath "appium" -ArgumentList "--relaxed-security","--log-timestamp","--local-timezone" -WindowStyle Hidden
-        Start-Sleep -Seconds 10
+        appium --relaxed-security --log-level debug > appium.log 2>&1 &
+        Start-Sleep -Seconds 15
 
-    - name: Set up Android Emulator
+    - name: Configurar Emulador Android
       run: |
-        # Install HAXM
         choco install -y haxm --force
-
-        # Accept licenses
-        yes | sdkmanager --licenses
-
-        # Install system image
-        sdkmanager "system-images;android-34;google_apis;x86_64"
-
-        # Create AVD
-        avdmanager create avd -n test_avd -k "system-images;android-34;google_apis;x86_64" -d pixel_4 -f
-
-        # Verify emulator path
-        where.exe emulator
-
-        # Start emulator with full path
+        $licenseFiles = @(
+            "android-sdk-license",
+            "android-googletv-license",
+            "intel-android-extra-license"
+        )
+        
+        foreach ($license in $licenseFiles) {
+            $licensePath = "$env:ANDROID_HOME\licenses\$license"
+            if (-not (Test-Path $licensePath)) {
+                New-Item -Path $licensePath -Force | Out-Null
+                echo "8933bad161af4178b1185d1a37fbf41ea5269c55" | Out-File -FilePath $licensePath -Encoding ASCII
+            }
+        }
+        
+        sdkmanager "system-images;android-34;google_apis;x86_64" --verbose
+        avdmanager create avd -n android_avd -k "system-images;android-34;google_apis;x86_64" -d pixel_4 -f
         $emulatorPath = "$env:ANDROID_HOME\emulator\emulator.exe"
-        Start-Process -FilePath $emulatorPath -ArgumentList "-avd","test_avd","-no-window","-gpu","swiftshader_indirect" -WindowStyle Hidden
-
-        # Wait for device
+        Start-Process -FilePath $emulatorPath -ArgumentList "-avd","android_avd","-no-window","-gpu","swiftshader_indirect","-no-snapshot","-noaudio","-no-boot-anim" -WindowStyle Hidden
         adb wait-for-device
         while (-not ((adb shell getprop sys.boot_completed) -eq "1")) {
           Start-Sleep -Seconds 5
-          Write-Host "Waiting for device..."
+          Write-Host "Aguardando inicialização do emulador..."
         }
+        Write-Host "Emulador pronto!"
 
-    - name: Run Tests
+    - name: Executar testes
       run: |
         mvn clean test -Pandroid -Dappium.server.url=http://127.0.0.1:4723
 
-    - name: Upload test reports
+    - name: Upload de relatórios
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: test-reports
+        name: relatorios-teste
         path: |
           target/surefire-reports/
           target/screenshots/
+          appium.log
