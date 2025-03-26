@@ -2,10 +2,10 @@ name: Appium Android
 
 on:
   push:
-    branches: 
+    branches:
       - main
   pull_request:
-    branches: 
+    branches:
       - main
   workflow_dispatch:
 
@@ -17,21 +17,21 @@ jobs:
         api-level: [25]  
         target: [default]
     steps:
-    - uses: actions/checkout@v2
-    - name: Set up JDK 17 (AdoptOpenJDK)
-      uses: actions/setup-java@v2
+    - uses: actions/checkout@v3
+    - name: Set up JDK 17 (Adoptium)
+      uses: actions/setup-java@v3
       with:
         java-version: 17
-        distribution: 'adoptopenjdk'
-    - uses: actions/setup-node@v2
+        distribution: 'adoptium'
+    - uses: actions/setup-node@v3
       with:
         node-version: '12'
     - run: |
-        npm install -g appium@v1.20.2
-        appium -v
-        nohup appium &>/dev/null &  # Iniciar Appium em segundo plano
+        npm install -g appium@1.20.2  # Instalar a versão específica do Appium
+        appium -v  # Verificar a versão do Appium
+        nohup appium &>/dev/null &  # Iniciar o Appium em segundo plano
     - name: Run Appium Tests
-      uses: reactivecircus/android-emulator-runner@v2
+      uses: reactivecircus/android-emulator-runner@v3
       with:
         api-level: ${{ matrix.api-level }}
         target: ${{ matrix.target }}
