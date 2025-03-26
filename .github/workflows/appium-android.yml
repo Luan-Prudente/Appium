@@ -27,11 +27,11 @@ jobs:
       with:
         node-version: '12'
     - run: |
-        npm install -g appium@1.20.2  # Instalar a versão específica do Appium
-        appium -v  # Verificar a versão do Appium
-        nohup appium &>/dev/null &  # Iniciar o Appium em segundo plano
+        npm install -g appium@1.20.2
+        appium -v
+        nohup appium &>/dev/null &
     - name: Run Appium Tests
-      uses: reactivecircus/android-emulator-runner@v3
+      uses: reactivecircus/android-emulator-runner@v2
       with:
         api-level: ${{ matrix.api-level }}
         target: ${{ matrix.target }}
