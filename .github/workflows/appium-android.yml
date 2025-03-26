@@ -1,7 +1,13 @@
 name: Appium Android
+
 on:
+  push:
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   build:
@@ -11,19 +17,19 @@ jobs:
         api-level: [25]  
         target: [default]
     steps:
-    - uses: actions/checkout@v2
-    - name: Set up JDK 1.8
-      uses: actions/setup-java@v2
+    - uses: actions/checkout@v3
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
       with:
         java-version: 17
-        distribution: 'corretto'
-    - uses: actions/setup-node@v2
+        distribution: 'temurin'
+    - uses: actions/setup-node@v3
       with:
         node-version: '12'
     - run: |
-        npm install -g appium@v1.20.2  # Ou considere uma versão mais recente, se necessário
+        npm install -g appium@1.20.2
         appium -v
-        nohup appium &>/dev/null &  # Usando nohup para garantir que o Appium continue em segundo plano
+        nohup appium &>/dev/null &
     - name: Run Appium Tests
       uses: reactivecircus/android-emulator-runner@v2
       with:
