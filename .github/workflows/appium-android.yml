@@ -59,14 +59,20 @@ jobs:
 
     - name: Accept licenses
       run: |
-        mkdir -p "$env:ANDROID_HOME/licenses"
+        mkdir -p "$env:ANDROID_HOME/licenses" 2>$null
         echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > "$env:ANDROID_HOME/licenses/android-sdk-license"
         echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> "$env:ANDROID_HOME/licenses/android-sdk-license"
 
+    - name: Add Android tools to PATH
+      run: |
+        echo "$env:ANDROID_HOME\emulator" >> $env:GITHUB_PATH
+        echo "$env:ANDROID_HOME\platform-tools" >> $env:GITHUB_PATH
+        echo "$env:ANDROID_HOME\cmdline-tools\latest\bin" >> $env:GITHUB_PATH
+        echo "$env:GITHUB_WORKSPACE" >> $env:GITHUB_PATH
+
     - name: Install system image
       run: |
-        .\sdkmanager.bat --install "system-images;android-34;google_apis;x86_64"
-        .\sdkmanager.bat --list
+        .\sdkmanager.bat "system-images;android-34;google_apis;x86_64" --verbose
 
     - name: Create AVD
       run: |
