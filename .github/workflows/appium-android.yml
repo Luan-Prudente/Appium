@@ -30,28 +30,35 @@ jobs:
         build-tools: '34.0.0'
         platforms: 'android-34'
         emulator: true
+        ndk: '25.2.9519653'
 
     - name: Configure JAXB environment
       run: |
-        New-Item -ItemType Directory -Path jaxb_libs -Force -ErrorAction SilentlyContinue
-
-        $jaxbLibs = @(
-          "https://repo1.maven.org/maven2/javax/xml/bind/jaxb-api/2.3.1/jaxb-api-2.3.1.jar",
-          "https://repo1.maven.org/maven2/com/sun/xml/bind/jaxb-core/2.3.0.1/jaxb-core-2.3.0.1.jar",
-          "https://repo1.maven.org/maven2/com/sun/xml/bind/jaxb-impl/2.3.1/jaxb-impl-2.3.1.jar",
-          "https://repo1.maven.org/maven2/javax/activation/activation/1.1.1/activation-1.1.1.jar"
-        )
-        
-        foreach ($lib in $jaxbLibs) {
-          $fileName = $lib.Split('/')[-1]
-          Invoke-WebRequest -Uri $lib -OutFile "jaxb_libs\$fileName"
+        # Create directory for JAXB libraries
+        if (!(Test-Path "jaxb_libs")) {
+            New-Item -ItemType Directory -Path "jaxb_libs" -Force
         }
 
+        # Download required JAXB libraries
+        $libs = @{
+            "jaxb-api.jar" = "https://repo1.maven.org/maven2/javax/xml/bind/jaxb-api/2.3.1/jaxb-api-2.3.1.jar"
+            "jaxb-core.jar" = "https://repo1.maven.org/maven2/com/sun/xml/bind/jaxb-core/2.3.0.1/jaxb-core-2.3.0.1.jar"
+            "jaxb-impl.jar" = "https://repo1.maven.org/maven2/com/sun/xml/bind/jaxb-impl/2.3.1/jaxb-impl-2.3.1.jar"
+            "activation.jar" = "https://repo1.maven.org/maven2/javax/activation/activation/1.1.1/activation-1.1.1.jar"
+        }
+
+        foreach ($lib in $libs.GetEnumerator()) {
+            if (!(Test-Path "jaxb_libs\$($lib.Key)")) {
+                Invoke-WebRequest -Uri $lib.Value -OutFile "jaxb_libs\$($lib.Key)"
+            }
+        }
+
+        # Create wrapper script for sdkmanager
         $wrapperScript = @'
         @echo off
         setlocal
         set CLASSPATH=%~dp0jaxb_libs\*;%CLASSPATH%
-        set JAVA_OPTS=--add-modules java.xml.bind %JAVA_OPTS%
+        set JAVA_OPTS=--add-modules java.se --add-modules java.xml.bind --add-modules java.activation %JAVA_OPTS%
         "%ANDROID_HOME%\cmdline-tools\latest\bin\sdkmanager" %*
         endlocal
         '@
@@ -60,10 +67,12 @@ jobs:
     - name: Setup Android licenses
       run: |
         if (!(Test-Path "$env:ANDROID_HOME/licenses")) {
-          New-Item -ItemType Directory -Path "$env:ANDROID_HOME/licenses" -Force
+            New-Item -ItemType Directory -Path "$env:ANDROID_HOME/licenses" -Force
         }
-        "8933bad161af4178b1185d1a37fbf41ea5269c55" | Out-File -FilePath "$env:ANDROID_HOME/licenses/android-sdk-license" -Encoding ASCII
-        "d56f5187479451eabf01fb78af6dfcb131a6481e" | Out-File -FilePath "$env:ANDROID_HOME/licenses/android-sdk-license" -Append -Encoding ASCII
+        @"
+        8933bad161af4178b1185d1a37fbf41ea5269c55
+        d56f5187479451eabf01fb78af6dfcb131a6481e
+        "@ | Out-File -FilePath "$env:ANDROID_HOME/licenses/android-sdk-license" -Encoding ASCII
 
     - name: Add Android tools to PATH
       run: |
@@ -74,6 +83,7 @@ jobs:
 
     - name: Install system image
       run: |
+        & "$env:GITHUB_WORKSPACE\sdkmanager.bat" "platform-tools" "emulator" "platforms;android-34" --verbose
         & "$env:GITHUB_WORKSPACE\sdkmanager.bat" "system-images;android-34;google_apis;x86_64" --verbose
 
     - name: Create AVD
@@ -89,7 +99,8 @@ jobs:
       run: |
         npm install -g appium@2.0
         npm install -g appium-doctor
-        appium-doctor --android
+        appium-doctor --android | Out-File -FilePath appium-doctor.log
+        Get-Content appium-doctor.log
 
     - name: Start Appium server
       run: |
@@ -98,16 +109,26 @@ jobs:
 
     - name: Start emulator
       run: |
-        Start-Process -FilePath "$env:ANDROID_HOME\emulator\emulator" -ArgumentList "-avd","test","-no-window","-gpu","swiftshader_indirect" -WindowStyle Hidden
+        $emulatorProcess = Start-Process -FilePath "$env:ANDROID_HOME\emulator\emulator" `
+            -ArgumentList "-avd","test","-no-window","-gpu","swiftshader_indirect","-no-snapshot","-noaudio","-no-boot-anim" `
+            -WindowStyle Hidden -PassThru
+        
         adb wait-for-device
+        $timeout = 300 # 5 minutes
+        $startTime = Get-Date
         while (-not ((adb shell getprop sys.boot_completed) -eq "1")) {
-          Start-Sleep -Seconds 5
-          Write-Host "Waiting for emulator..."
+            if (((Get-Date) - $startTime).TotalSeconds -gt $timeout) {
+                Write-Host "Emulator boot timeout"
+                exit 1
+            }
+            Start-Sleep -Seconds 5
+            Write-Host "Waiting for emulator to boot..."
         }
+        Write-Host "Emulator ready"
 
     - name: Run tests
       run: |
-        mvn clean test -Pandroid -Dappium.server.url=http://127.0.0.1:4723
+        mvn clean test -Pandroid -Dappium.server.url=http://127.0.0.1:4723 -e -B
 
     - name: Upload reports
       if: always()
@@ -117,3 +138,4 @@ jobs:
         path: |
           target/surefire-reports/
           target/screenshots/
+          appium-doctor.log
