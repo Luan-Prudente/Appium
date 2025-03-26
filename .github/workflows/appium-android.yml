@@ -1,4 +1,4 @@
-name: Appium Android
+name: Appium Android (Windows)
 
 on:
   push:
@@ -27,8 +27,9 @@ jobs:
       with:
         android-sdk-root: C:\Android\android-sdk
 
-    - name: Add Android to PATH
+    - name: Add Android tools to PATH
       run: |
+        echo "C:\Android\android-sdk\emulator" >> $env:GITHUB_PATH
         echo "C:\Android\android-sdk\cmd" >> $env:GITHUB_PATH
         echo "C:\Android\android-sdk\platform-tools" >> $env:GITHUB_PATH
 
@@ -50,11 +51,26 @@ jobs:
 
     - name: Set up Android Emulator
       run: |
+        # Install HAXM
         choco install -y haxm --force
-        sdkmanager --licenses | Out-Null
+
+        # Accept licenses
+        yes | sdkmanager --licenses
+
+        # Install system image
         sdkmanager "system-images;android-34;google_apis;x86_64"
+
+        # Create AVD
         avdmanager create avd -n test_avd -k "system-images;android-34;google_apis;x86_64" -d pixel_4 -f
-        Start-Process -FilePath "emulator" -ArgumentList "-avd","test_avd","-no-window","-gpu","swiftshader_indirect" -WindowStyle Hidden
+
+        # Verify emulator path
+        where.exe emulator
+
+        # Start emulator with full path
+        $emulatorPath = "$env:ANDROID_HOME\emulator\emulator.exe"
+        Start-Process -FilePath $emulatorPath -ArgumentList "-avd","test_avd","-no-window","-gpu","swiftshader_indirect" -WindowStyle Hidden
+
+        # Wait for device
         adb wait-for-device
         while (-not ((adb shell getprop sys.boot_completed) -eq "1")) {
           Start-Sleep -Seconds 5
