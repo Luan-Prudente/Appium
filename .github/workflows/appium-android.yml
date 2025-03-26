@@ -2,9 +2,9 @@ name: Appium Android
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -22,10 +22,14 @@ jobs:
         java-version: 17
         distribution: 'temurin'
 
-    - name: Set up Android SDK
+    - name: Install Android SDK
       uses: android-actions/setup-android@v3
       with:
-        android-sdk-root: C:\Android\sdk
+        android-sdk-root: ${{ env.ANDROID_HOME }}
+        cmdline-tools: 'latest'
+        build-tools: '34.0.0'
+        platforms: 'android-34'
+        emulator: true
 
     - name: Configure JAXB environment
       run: |
@@ -48,23 +52,25 @@ jobs:
         setlocal
         set CLASSPATH=%~dp0jaxb_libs\*;%CLASSPATH%
         set JAVA_OPTS=--add-modules java.xml.bind %JAVA_OPTS%
-        "%ANDROID_HOME%\cmd\sdkmanager" %*
+        "%ANDROID_HOME%\cmdline-tools\latest\bin\sdkmanager" %*
         endlocal
         '@
         $wrapperScript | Out-File -FilePath "$env:GITHUB_WORKSPACE\sdkmanager.bat" -Encoding ASCII
 
-    - name: Add Android tools to PATH
+    - name: Accept licenses
       run: |
-        echo "C:\Android\sdk\emulator" >> $env:GITHUB_PATH
-        echo "C:\Android\sdk\platform-tools" >> $env:GITHUB_PATH
-        echo "C:\Android\sdk\cmd" >> $env:GITHUB_PATH
-        echo "$env:GITHUB_WORKSPACE" >> $env:GITHUB_PATH
+        mkdir -p "$env:ANDROID_HOME/licenses"
+        echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > "$env:ANDROID_HOME/licenses/android-sdk-license"
+        echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> "$env:ANDROID_HOME/licenses/android-sdk-license"
 
-    - name: Accept Android licenses
+    - name: Install system image
       run: |
-        mkdir -p "C:\Android\sdk\licenses"
-        echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > "C:\Android\sdk\licenses\android-sdk-license"
-        echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> "C:\Android\sdk\licenses\android-sdk-license"
+        .\sdkmanager.bat --install "system-images;android-34;google_apis;x86_64"
+        .\sdkmanager.bat --list
+
+    - name: Create AVD
+      run: |
+        avdmanager create avd -n test -k "system-images;android-34;google_apis;x86_64" -d pixel_4 -f
 
     - name: Set up Node.js
       uses: actions/setup-node@v3
@@ -77,13 +83,6 @@ jobs:
         npm install -g appium-doctor
         appium-doctor --android
 
-    - name: Set up Android emulator
-      run: |
-        cd $env:GITHUB_WORKSPACE
-        .\sdkmanager.bat "platform-tools" "emulator" "platforms;android-34"
-        .\sdkmanager.bat "system-images;android-34;google_apis;x86_64"
-        avdmanager create avd -n test -k "system-images;android-34;google_apis;x86_64" -d pixel_4 -f
-
     - name: Start Appium server
       run: |
         Start-Process -FilePath "appium" -ArgumentList "--relaxed-security","--log-level","debug" -WindowStyle Hidden
@@ -91,18 +90,18 @@ jobs:
 
     - name: Start emulator
       run: |
-        Start-Process -FilePath "C:\Android\sdk\emulator\emulator" -ArgumentList "-avd","test","-no-window","-gpu","swiftshader_indirect" -WindowStyle Hidden
+        Start-Process -FilePath "$env:ANDROID_HOME\emulator\emulator" -ArgumentList "-avd","test","-no-window","-gpu","swiftshader_indirect" -WindowStyle Hidden
         adb wait-for-device
         while (-not ((adb shell getprop sys.boot_completed) -eq "1")) {
           Start-Sleep -Seconds 5
           Write-Host "Waiting for emulator..."
         }
 
-    - name: Run Appium tests
+    - name: Run tests
       run: |
         mvn clean test -Pandroid -Dappium.server.url=http://127.0.0.1:4723
 
-    - name: Upload test reports
+    - name: Upload reports
       if: always()
       uses: actions/upload-artifact@v4
       with:
