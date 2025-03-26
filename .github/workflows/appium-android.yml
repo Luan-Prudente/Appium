@@ -44,13 +44,13 @@ jobs:
         }
 
         $wrapperScript = @'
-          @echo off
-          setlocal
-          set CLASSPATH=%~dp0jaxb_libs\*;%CLASSPATH%
-          set JAVA_OPTS=--add-modules java.xml.bind %JAVA_OPTS%
-          "%ANDROID_HOME%\cmd\sdkmanager" %*
-          endlocal
-          '@
+        @echo off
+        setlocal
+        set CLASSPATH=%~dp0jaxb_libs\*;%CLASSPATH%
+        set JAVA_OPTS=--add-modules java.xml.bind %JAVA_OPTS%
+        "%ANDROID_HOME%\cmd\sdkmanager" %*
+        endlocal
+        '@
         $wrapperScript | Out-File -FilePath "$env:GITHUB_WORKSPACE\sdkmanager.bat" -Encoding ASCII
 
     - name: Add Android tools to PATH
