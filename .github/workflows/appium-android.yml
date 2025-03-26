@@ -1,4 +1,4 @@
-name: Appium Android
+name: Appium Android Tests
 
 on:
   push:
@@ -12,8 +12,7 @@ jobs:
     runs-on: windows-latest
     env:
       ANDROID_HOME: C:\Android\sdk
-      PATH: ${{ env.ANDROID_HOME }}\emulator;${{ env.ANDROID_HOME }}\platform-tools;${{ env.ANDROID_HOME }}\cmd;${{ env.PATH }}
-
+    
     steps:
     - uses: actions/checkout@v4
 
@@ -25,32 +24,37 @@ jobs:
 
     - name: Set up Android SDK
       uses: android-actions/setup-android@v3
+      with:
+        android-sdk-root: C:\Android\sdk
 
     - name: Configure JAXB environment
       run: |
-        # Cria diretório para bibliotecas JAXB
         New-Item -ItemType Directory -Path jaxb_libs -Force
 
-        # Baixa bibliotecas JAXB necessárias
-        $libs = @(
-          @{Name="jaxb-api.jar"; Url="https://repo1.maven.org/maven2/javax/xml/bind/jaxb-api/2.3.1/jaxb-api-2.3.1.jar"},
-          @{Name="jaxb-core.jar"; Url="https://repo1.maven.org/maven2/com/sun/xml/bind/jaxb-core/2.3.0.1/jaxb-core-2.3.0.1.jar"},
-          @{Name="jaxb-impl.jar"; Url="https://repo1.maven.org/maven2/com/sun/xml/bind/jaxb-impl/2.3.1/jaxb-impl-2.3.1.jar"},
-          @{Name="activation.jar"; Url="https://repo1.maven.org/maven2/javax/activation/activation/1.1.1/activation-1.1.1.jar"}
+        $jaxbLibs = @(
+          "https://repo1.maven.org/maven2/javax/xml/bind/jaxb-api/2.3.1/jaxb-api-2.3.1.jar",
+          "https://repo1.maven.org/maven2/com/sun/xml/bind/jaxb-core/2.3.0.1/jaxb-core-2.3.0.1.jar",
+          "https://repo1.maven.org/maven2/com/sun/xml/bind/jaxb-impl/2.3.1/jaxb-impl-2.3.1.jar",
+          "https://repo1.maven.org/maven2/javax/activation/activation/1.1.1/activation-1.1.1.jar"
         )
-
-        foreach ($lib in $libs) {
-          Invoke-WebRequest -Uri $lib.Url -OutFile "jaxb_libs\$($lib.Name)"
+        
+        foreach ($lib in $jaxbLibs) {
+          $fileName = $lib.Split('/')[-1]
+          Invoke-WebRequest -Uri $lib -OutFile "jaxb_libs\$fileName"
         }
+
+    - name: Add Android tools to PATH
+      run: |
+        echo "C:\Android\sdk\emulator" >> $env:GITHUB_PATH
+        echo "C:\Android\sdk\platform-tools" >> $env:GITHUB_PATH
+        echo "C:\Android\sdk\cmd" >> $env:GITHUB_PATH
+        echo "$pwd" >> $env:GITHUB_PATH
 
     - name: Accept Android licenses
       run: |
-        if (-not (Test-Path "$env:ANDROID_HOME\licenses")) {
-          New-Item -ItemType Directory -Path "$env:ANDROID_HOME\licenses" -Force
-        }
-        
-        "8933bad161af4178b1185d1a37fbf41ea5269c55" | Out-File -FilePath "$env:ANDROID_HOME\licenses\android-sdk-license" -Encoding ASCII
-        "d56f5187479451eabf01fb78af6dfcb131a6481e" | Out-File -FilePath "$env:ANDROID_HOME\licenses\android-sdk-license" -Append -Encoding ASCII
+        mkdir -p "C:\Android\sdk\licenses"
+        echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > "C:\Android\sdk\licenses\android-sdk-license"
+        echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> "C:\Android\sdk\licenses\android-sdk-license"
 
     - name: Set up Node.js
       uses: actions/setup-node@v3
@@ -76,7 +80,7 @@ jobs:
 
     - name: Start emulator
       run: |
-        Start-Process -FilePath "$env:ANDROID_HOME\emulator\emulator" -ArgumentList "-avd","test","-no-window","-gpu","swiftshader_indirect" -WindowStyle Hidden
+        Start-Process -FilePath "C:\Android\sdk\emulator\emulator" -ArgumentList "-avd","test","-no-window","-gpu","swiftshader_indirect" -WindowStyle Hidden
         adb wait-for-device
         while (-not ((adb shell getprop sys.boot_completed) -eq "1")) {
           Start-Sleep -Seconds 5
