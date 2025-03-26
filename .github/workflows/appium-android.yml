@@ -18,18 +18,20 @@ jobs:
         target: [default]
     steps:
     - uses: actions/checkout@v3
-    - name: Set up JDK 17 (AdoptOpenJDK)
+    - name: Set up JDK 17
       uses: actions/setup-java@v3
       with:
         java-version: 17
-        distribution: 'adoptopenjdk'
+        distribution: 'temurin'
     - uses: actions/setup-node@v3
       with:
         node-version: '12'
     - run: |
-        npm install -g appium@1.20.2  # Instalar a versão específica do Appium
-        appium -v  # Verificar a versão do Appium
-        nohup appium &>/dev/null &  # Iniciar o Appium em segundo plano
+        npm install -g appium@1.20.2
+        appium -v
+        nohup appium &>/dev/null &
+    - name: List files (debug)
+      run: ls -la
     - name: Run Appium Tests
       uses: reactivecircus/android-emulator-runner@v2
       with:
@@ -37,4 +39,5 @@ jobs:
         target: ${{ matrix.target }}
         arch: x86_64
         profile: Nexus 6
-        script: mvn clean test -P android
+        working-directory: ./Appium_Advanced
+        script: mvn clean test
