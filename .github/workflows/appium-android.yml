@@ -12,10 +12,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    env:
-      ANDROID_HOME: C:\Android\android-sdk
-      PATH: ${{ env.ANDROID_HOME }}\cmd;${{ env.ANDROID_HOME }}\platform-tools;${{ env.PATH }}
-
+    
     steps:
     - uses: actions/checkout@v4
 
@@ -27,8 +24,16 @@ jobs:
 
     - name: Set up Android SDK
       uses: android-actions/setup-android@v3
+      with:
+        android-sdk-root: C:\Android\android-sdk
 
-    - uses: actions/setup-node@v3
+    - name: Add Android to PATH
+      run: |
+        echo "C:\Android\android-sdk\cmd" >> $env:GITHUB_PATH
+        echo "C:\Android\android-sdk\platform-tools" >> $env:GITHUB_PATH
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
       with:
         node-version: '18'
 
@@ -46,10 +51,10 @@ jobs:
     - name: Set up Android Emulator
       run: |
         choco install -y haxm --force
-        sdkmanager --licenses || true
+        sdkmanager --licenses | Out-Null
         sdkmanager "system-images;android-34;google_apis;x86_64"
-        avdmanager create avd -n test_avd -k "system-images;android-34;google_apis;x86_64" -d "pixel_4" -f
-        emulator -avd test_avd -no-window -gpu swiftshader_indirect &
+        avdmanager create avd -n test_avd -k "system-images;android-34;google_apis;x86_64" -d pixel_4 -f
+        Start-Process -FilePath "emulator" -ArgumentList "-avd","test_avd","-no-window","-gpu","swiftshader_indirect" -WindowStyle Hidden
         adb wait-for-device
         while (-not ((adb shell getprop sys.boot_completed) -eq "1")) {
           Start-Sleep -Seconds 5
