@@ -33,11 +33,20 @@ jobs:
     - name: List files (debug)
       run: ls -la
     - name: Run Appium Tests
-      uses: reactivecircus/android-emulator-runner@v2
+      uses: reactivecircus/android-emulator-runner@v2.1.0
       with:
         api-level: ${{ matrix.api-level }}
         target: ${{ matrix.target }}
         arch: x86_64
         profile: Nexus 6
-        working-directory: ./Appium_Advanced
-        script: mvn clean test
+        script: |
+          # Reset ADB e aguarda o device
+          adb kill-server
+          adb start-server
+          adb wait-for-device
+          
+          until adb shell getprop sys.boot_completed | grep -q "1"; do
+            sleep 5
+          done
+      
+          mvn clean test -Pandroid
