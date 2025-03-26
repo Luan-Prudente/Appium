@@ -1,4 +1,4 @@
-name: Appium Android Tests
+name: Appium Android
 
 on:
   push:
@@ -28,41 +28,29 @@ jobs:
 
     - name: Configure JAXB environment
       run: |
+        # Cria diretório para bibliotecas JAXB
         New-Item -ItemType Directory -Path jaxb_libs -Force
 
-        $jaxbLibs = @{
-          "jaxb-api-2.3.1.jar" = "https://repo1.maven.org/maven2/javax/xml/bind/jaxb-api/2.3.1/jaxb-api-2.3.1.jar"
-          "jaxb-core-2.3.0.1.jar" = "https://repo1.maven.org/maven2/com/sun/xml/bind/jaxb-core/2.3.0.1/jaxb-core-2.3.0.1.jar"
-          "jaxb-impl-2.3.1.jar" = "https://repo1.maven.org/maven2/com/sun/xml/bind/jaxb-impl/2.3.1/jaxb-impl-2.3.1.jar"
-          "activation-1.1.1.jar" = "https://repo1.maven.org/maven2/javax/activation/activation/1.1.1/activation-1.1.1.jar"
-        }
-        
-        $jaxbLibs.GetEnumerator() | ForEach-Object -Parallel {
-          Invoke-WebRequest -Uri $_.Value -OutFile "jaxb_libs\$($_.Key)"
-        }
+        # Baixa bibliotecas JAXB necessárias
+        $libs = @(
+          @{Name="jaxb-api.jar"; Url="https://repo1.maven.org/maven2/javax/xml/bind/jaxb-api/2.3.1/jaxb-api-2.3.1.jar"},
+          @{Name="jaxb-core.jar"; Url="https://repo1.maven.org/maven2/com/sun/xml/bind/jaxb-core/2.3.0.1/jaxb-core-2.3.0.1.jar"},
+          @{Name="jaxb-impl.jar"; Url="https://repo1.maven.org/maven2/com/sun/xml/bind/jaxb-impl/2.3.1/jaxb-impl-2.3.1.jar"},
+          @{Name="activation.jar"; Url="https://repo1.maven.org/maven2/javax/activation/activation/1.1.1/activation-1.1.1.jar"}
+        )
 
-        $wrapperScript = @'
-@echo off
-setlocal
-set CLASSPATH=%~dp0jaxb_libs\*;%CLASSPATH%
-set JAVA_OPTS=--add-modules java.xml.bind %JAVA_OPTS%
-call "%ANDROID_HOME%\cmd\sdkmanager" %*
-endlocal
-'@
-        $wrapperScript | Out-File -FilePath sdkmanager.bat -Encoding ASCII
+        foreach ($lib in $libs) {
+          Invoke-WebRequest -Uri $lib.Url -OutFile "jaxb_libs\$($lib.Name)"
+        }
 
     - name: Accept Android licenses
       run: |
-        # Create licenses directory if not exists
-        if (!(Test-Path "$env:ANDROID_HOME\licenses")) {
+        if (-not (Test-Path "$env:ANDROID_HOME\licenses")) {
           New-Item -ItemType Directory -Path "$env:ANDROID_HOME\licenses" -Force
         }
         
-        # Add required licenses
-        @"
-8933bad161af4178b1185d1a37fbf41ea5269c55
-d56f5187479451eabf01fb78af6dfcb131a6481e
-"@ | Out-File -FilePath "$env:ANDROID_HOME\licenses\android-sdk-license" -Encoding ASCII
+        "8933bad161af4178b1185d1a37fbf41ea5269c55" | Out-File -FilePath "$env:ANDROID_HOME\licenses\android-sdk-license" -Encoding ASCII
+        "d56f5187479451eabf01fb78af6dfcb131a6481e" | Out-File -FilePath "$env:ANDROID_HOME\licenses\android-sdk-license" -Append -Encoding ASCII
 
     - name: Set up Node.js
       uses: actions/setup-node@v3
@@ -73,46 +61,31 @@ d56f5187479451eabf01fb78af6dfcb131a6481e
       run: |
         npm install -g appium@2.0
         npm install -g appium-doctor
-        appium-doctor --android | Out-File -FilePath appium-doctor.log -Encoding UTF8
-        Get-Content appium-doctor.log
+        appium-doctor --android
 
     - name: Set up Android emulator
       run: |
-        # Install required components
-        .\sdkmanager.bat "platform-tools" "emulator" "platforms;android-34" --verbose
-        .\sdkmanager.bat "system-images;android-34;google_apis;x86_64" --verbose
+        .\sdkmanager.bat "platform-tools" "emulator" "platforms;android-34"
+        .\sdkmanager.bat "system-images;android-34;google_apis;x86_64"
+        avdmanager create avd -n test -k "system-images;android-34;google_apis;x86_64" -d pixel_4 -f
 
-        avdmanager create avd -n test -k "system-images;android-34;google_apis;x86_64" -d pixel_4 -f | Out-File -FilePath avdmanager.log -Encoding UTF8
-        Get-Content avdmanager.log
-
-    - name: Start services
+    - name: Start Appium server
       run: |
-        $appiumProcess = Start-Process -FilePath "appium" `
-          -ArgumentList "--relaxed-security","--log-level","debug:info" `
-          -WindowStyle Hidden `
-          -PassThru
-        
-        $emulatorProcess = Start-Process -FilePath "$env:ANDROID_HOME\emulator\emulator" `
-          -ArgumentList "-avd","test","-no-window","-gpu","swiftshader_indirect","-no-snapshot","-noaudio","-no-boot-anim" `
-          -WindowStyle Hidden `
-          -PassThru
-        
+        Start-Process -FilePath "appium" -ArgumentList "--relaxed-security","--log-level","debug" -WindowStyle Hidden
+        Start-Sleep -Seconds 15
+
+    - name: Start emulator
+      run: |
+        Start-Process -FilePath "$env:ANDROID_HOME\emulator\emulator" -ArgumentList "-avd","test","-no-window","-gpu","swiftshader_indirect" -WindowStyle Hidden
         adb wait-for-device
-        $timeout = 300 # 5 minutes timeout
-        $startTime = Get-Date
         while (-not ((adb shell getprop sys.boot_completed) -eq "1")) {
-          if (((Get-Date) - $startTime).TotalSeconds -gt $timeout) {
-            Write-Host "Emulator boot timeout"
-            exit 1
-          }
           Start-Sleep -Seconds 5
-          Write-Host "Waiting for emulator to boot..."
+          Write-Host "Waiting for emulator..."
         }
-        Write-Host "Emulator ready"
 
     - name: Run Appium tests
       run: |
-        mvn clean test -Pandroid -Dappium.server.url=http://127.0.0.1:4723 -e -B
+        mvn clean test -Pandroid -Dappium.server.url=http://127.0.0.1:4723
 
     - name: Upload test reports
       if: always()
@@ -122,5 +95,3 @@ d56f5187479451eabf01fb78af6dfcb131a6481e
         path: |
           target/surefire-reports/
           target/screenshots/
-          appium-doctor.log
-          avdmanager.log
