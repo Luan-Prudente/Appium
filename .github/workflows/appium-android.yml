@@ -1,8 +1,14 @@
 name: Appium Android
-on:
-  pull_request:
-    branches: [ main ]
 
+on:
+  push:
+    branches: 
+      - main
+  pull_request:
+    branches: 
+      - main
+  workflow_dispatch:
+  
 jobs:
   build:
     runs-on: ubuntu-latest 
@@ -21,9 +27,9 @@ jobs:
       with:
         node-version: '12'
     - run: |
-        npm install -g appium@v1.20.2  # Ou considere uma versão mais recente, se necessário
+        npm install -g appium@v1.20.2
         appium -v
-        nohup appium &>/dev/null &  # Usando nohup para garantir que o Appium continue em segundo plano
+        nohup appium &>/dev/null &
     - name: Run Appium Tests
       uses: reactivecircus/android-emulator-runner@v2
       with:
