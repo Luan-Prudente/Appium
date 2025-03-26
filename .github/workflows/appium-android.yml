@@ -18,11 +18,11 @@ jobs:
         target: [default]
     steps:
     - uses: actions/checkout@v2
-    - name: Set up JDK 17 (Amazon Corretto)
+    - name: Set up JDK 17 (AdoptOpenJDK)
       uses: actions/setup-java@v2
       with:
         java-version: 17
-        distribution: 'amazon-corretto'
+        distribution: 'adoptopenjdk'
     - uses: actions/setup-node@v2
       with:
         node-version: '12'
